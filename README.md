@@ -9,9 +9,12 @@ This repository contains a curated collection of book skill folders used for lea
 
 ## How to use it
 
-- Open the generated site in your browser to explore the available book skills.
-- Use the tabs to switch between skill folders.
-- Choose a markdown file from the dropdown to preview its content.
+- Run `./refresh_site.sh` to regenerate `index.html`, `styles.css`, and `app.js` from the markdown on disk.
+- Open `index.html` in your browser to explore the content.
+- Switch between the two top-level tabs:
+  - **Summary and Insights** — the `cheatsheet.md`, `glossary.md`, and `patterns.md` files from each folder in `book-skills/`.
+  - **Guided Reading** — the quiz and arguments-and-evidence files from `reading-helper/`.
+- Inside a tab, use the book buttons to switch books and the dropdown to choose a markdown file.
 
 ## Purpose
 
