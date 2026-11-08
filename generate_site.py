@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from html import escape
+import hashlib
 import json
 import re
 
@@ -62,16 +63,39 @@ def title_from_skill_md(folder: Path) -> str | None:
     return None
 
 
+# Boilerplate wrapped around the book title in reading-helper H1 lines, e.g.
+# "# Quiz Book: The Essential Psycho-Cybernetics (Maxwell Maltz)" or
+# "# Range (David Epstein) - Quiz Book". Only a fallback: skill_book_map.json wins.
+DOC_LABEL_RE = re.compile(
+    r'^\s*(?:the\s+)?(?:quiz\s+book|quiz|arguments?\s*(?:&|and)\s*evidence)\s*[:\-\u2013\u2014]?\s*'
+    r'|\s*[:\-\u2013\u2014]?\s*(?:the\s+)?(?:quiz\s+book|quiz|arguments?\s*(?:&|and)\s*evidence)\s*$',
+    re.IGNORECASE,
+)
+
+
 def title_from_reading_helper(path: Path) -> str | None:
-    """Reading-helper files open with `# <Short> Quiz Book` then `*Full Title* by Author`."""
-    lines = path.read_text(encoding='utf-8', errors='ignore').splitlines()[:6]
+    """Best-effort title from a reading-helper file's opening lines.
+
+    Header wording varies a lot between files, so this is only a fallback for a
+    book that has no entry in skill_book_map.json - add one there to be sure.
+    """
+    lines = path.read_text(encoding='utf-8', errors='ignore').splitlines()[:8]
+
+    heading = next((line[2:].strip() for line in lines if line.startswith('# ')), None)
+    if heading:
+        title = heading
+        # Strip the document label from either end, then any trailing "(Author)".
+        for _ in range(2):
+            title = DOC_LABEL_RE.sub('', title).strip()
+        title = re.sub(r'\s*\((?:[^()]*)\)\s*$', '', title).strip()
+        title = title.strip('*"\u201c\u201d').strip(' :-\u2013\u2014')
+        if title:
+            return title
+
     for line in lines:
         match = re.match(r'^\*([^*]+)\*\s+by\s+', line.strip())
         if match:
             return match.group(1).strip()
-    for line in lines:
-        if line.startswith('# '):
-            return re.sub(r'\s+(Quiz Book|Quiz)$', '', line[2:].strip())
     return None
 
 
@@ -79,12 +103,22 @@ def title_from_reading_helper(path: Path) -> str | None:
 # markdown
 # --------------------------------------------------------------------------- #
 
+# Emphasis, longest delimiter run first. Each pattern requires the opening run
+# not to be preceded by another "*" and the closing run not to be followed by one,
+# so an unmatched run (e.g. a censored word like "s***") is left as literal text.
+BOLD_ITALIC_RE = re.compile(r'(?<!\*)\*\*\*(?!\s)(.+?)(?<!\s)\*\*\*(?!\*)')
+# ".+?" rather than "[^*]+?" so bold may contain nested italics: **a *b***
+BOLD_RE = re.compile(r'(?<!\*)\*\*(?!\s)(.+?)(?<!\s)\*\*(?!\*)')
+ITALIC_RE = re.compile(r'(?<!\*)\*(?!\s)([^*]+?)(?<!\s)\*(?!\*)')
+
+
 def render_inline(text: str) -> str:
     text = escape(text)
     text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', text)
     text = re.sub(r'`([^`]+)`', r'<code>\1</code>', text)
-    text = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', text)
-    text = re.sub(r'\*([^*]+)\*', r'<em>\1</em>', text)
+    text = BOLD_ITALIC_RE.sub(r'<strong><em>\1</em></strong>', text)
+    text = BOLD_RE.sub(r'<strong>\1</strong>', text)
+    text = ITALIC_RE.sub(r'<em>\1</em>', text)
     return text
 
 
@@ -643,7 +677,14 @@ document.querySelectorAll('.file-select').forEach((select) => {
 '''
 
 
+def asset_version(content: str) -> str:
+    """Short content hash, appended to asset URLs so browsers never serve a stale copy."""
+    return hashlib.md5(content.encode('utf-8')).hexdigest()[:8]
+
+
 def main() -> None:
+    css_version = asset_version(STYLES_CSS)
+    js_version = asset_version(APP_JS)
     book_map = load_skill_book_map()
     skill_books = collect_skill_books(book_map)
     reading_books = collect_reading_helper_books(book_map)
@@ -680,7 +721,7 @@ def main() -> None:
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Book Explorer</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v={css_version}" />
 </head>
 <body data-theme="day">
   <div class="page">
@@ -703,7 +744,7 @@ def main() -> None:
     </main>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v={js_version}"></script>
 </body>
 </html>
 '''
