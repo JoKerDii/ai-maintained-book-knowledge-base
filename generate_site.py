@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from html import escape
+import hashlib
 import json
 import re
 
@@ -643,7 +644,14 @@ document.querySelectorAll('.file-select').forEach((select) => {
 '''
 
 
+def asset_version(content: str) -> str:
+    """Short content hash, appended to asset URLs so browsers never serve a stale copy."""
+    return hashlib.md5(content.encode('utf-8')).hexdigest()[:8]
+
+
 def main() -> None:
+    css_version = asset_version(STYLES_CSS)
+    js_version = asset_version(APP_JS)
     book_map = load_skill_book_map()
     skill_books = collect_skill_books(book_map)
     reading_books = collect_reading_helper_books(book_map)
@@ -680,7 +688,7 @@ def main() -> None:
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Book Explorer</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v={css_version}" />
 </head>
 <body data-theme="day">
   <div class="page">
@@ -703,7 +711,7 @@ def main() -> None:
     </main>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v={js_version}"></script>
 </body>
 </html>
 '''
